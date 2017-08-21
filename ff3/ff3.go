@@ -27,6 +27,8 @@ import (
 	"errors"
 	"math"
 	"math/big"
+
+	"fmt"
 )
 
 // Note that this is strictly following the official NIST guidelines. In the linked PDF Appendix A (READHME.md), NIST recommends that radix^minLength >= 1,000,000. If you would like to follow that, change this parameter.
@@ -143,18 +145,19 @@ func (c Cipher) Encrypt(X string) (string, error) {
 	Tl := c.tweak[:halfTweakLen]
 	Tr := c.tweak[halfTweakLen:]
 
-	// P is always 16 bytes
 	var (
-		P = make([]byte, blockSize)
-		m uint32
-		W []byte
+		// P is known to be always 16 bytes
+		P [blockSize]byte
+		// m               uint32
+		W, S, numBBytes []byte
 
-		numB, numC       big.Int
+		// numB, numC       big.Int
 		numRadix, numY   big.Int
 		numU, numV       big.Int
 		numModU, numModV big.Int
-		S, numBBytes     []byte
 	)
+
+	var numRevA, numRevB, numRevC big.Int
 
 	numRadix.SetInt64(int64(radix))
 
@@ -166,14 +169,26 @@ func (c Cipher) Encrypt(X string) (string, error) {
 	numModU.Exp(&numRadix, &numU, nil)
 	numModV.Exp(&numRadix, &numV, nil)
 
+	// Bootstrap for first round
+	_, ok = numRevA.SetString(rev(A), radix)
+	if !ok {
+		return ret, ErrStringNotInRadix
+	}
+
+	_, ok = numRevB.SetString(rev(B), radix)
+	if !ok {
+		return ret, ErrStringNotInRadix
+	}
+
 	// Main Feistel Round, 8 times
 	for i := 0; i < numRounds; i++ {
+		fmt.Println("Round:", i)
 		// Determine Feistel Round parameters
 		if i%2 == 0 {
-			m = u
+			// m = u
 			W = Tr
 		} else {
-			m = v
+			// m = v
 			W = Tl
 		}
 
@@ -186,12 +201,7 @@ func (c Cipher) Encrypt(X string) (string, error) {
 		P[3] = W[3] ^ byte(i)
 
 		// The remaining 12 bytes of P are for rev(B) with padding
-		_, ok = numB.SetString(rev(B), radix)
-		if !ok {
-			return ret, ErrStringNotInRadix
-		}
-
-		numBBytes = numB.Bytes()
+		numBBytes = numRevB.Bytes()
 
 		// These middle bytes need to be reset to 0 for padding
 		for x := 0; x < 12-len(numBBytes); x++ {
@@ -200,41 +210,51 @@ func (c Cipher) Encrypt(X string) (string, error) {
 
 		copy(P[blockSize-len(numBBytes):], numBBytes)
 
+		fmt.Println("Step 4ii P:", P)
+
 		// Calculate S by operating on P in place
-		revP := revB(P)
+		revP := revB(P[:])
 
 		// P is fixed-length 16 bytes, so this call cannot panic
 		c.aesBlock.Encrypt(revP, revP)
 		S = revB(revP)
 
+		fmt.Printf("Step 4iii S: %x\n", S)
+
 		// Calculate numY
 		numY.SetBytes(S[:])
 
-		// Calculate c
-		_, ok = numC.SetString(rev(A), radix)
-		if !ok {
-			return ret, ErrStringNotInRadix
-		}
+		fmt.Println("Step 4iv y:", numY)
 
-		numC.Add(&numC, &numY)
+		// Calculate c
+		numRevC.Add(&numRevA, &numY)
 
 		if i%2 == 0 {
-			numC.Mod(&numC, &numModU)
+			numRevC.Mod(&numRevC, &numModU)
 		} else {
-			numC.Mod(&numC, &numModV)
+			numRevC.Mod(&numRevC, &numModV)
 		}
 
-		C := numC.Text(c.radix)
+		fmt.Println("Step 4iv c:", numRevC)
 
-		// Need to pad the text with leading 0s first to make sure it's the correct length
-		for len(C) < int(m) {
-			C = "0" + C
-		}
-		C = rev(C)
+		// C := numRevC.Text(c.radix)
 
 		// Final steps
-		A = B
-		B = C
+		numRevA.SetBytes(numRevB.Bytes())
+		numRevB = numRevC
+
+		fmt.Println("C:", numRevC)
+		fmt.Println("A:", numRevA)
+		fmt.Println("B:", numRevB)
+	}
+
+	A = numRevA.Text(radix)
+	B = numRevB.Text(radix)
+
+	// Pad B properly
+	// TODO: improve this, but don't import "strings" just for it
+	for len(B) < int(v) {
+		B = "0" + B
 	}
 
 	ret = A + B
@@ -278,17 +298,16 @@ func (c Cipher) Decrypt(X string) (string, error) {
 	Tl := c.tweak[:halfTweakLen]
 	Tr := c.tweak[halfTweakLen:]
 
-	// P is always 16 bytes
 	var (
-		P = make([]byte, blockSize)
-		m uint32
-		W []byte
+		// P is known to be always 16 bytes
+		P               [blockSize]byte
+		m               uint32
+		W, S, numABytes []byte
 
 		numA, numC       big.Int
 		numRadix, numY   big.Int
 		numU, numV       big.Int
 		numModU, numModV big.Int
-		S, numABytes     []byte
 	)
 
 	numRadix.SetInt64(int64(radix))
@@ -336,7 +355,7 @@ func (c Cipher) Decrypt(X string) (string, error) {
 		copy(P[blockSize-len(numABytes):], numABytes)
 
 		// Calculate S by operating on P in place
-		revP := revB(P)
+		revP := revB(P[:])
 
 		// P is fixed-length 16 bytes, so this call cannot panic
 		c.aesBlock.Encrypt(revP, revP)
