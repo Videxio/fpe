@@ -126,12 +126,12 @@ func TestEncrypt(t *testing.T) {
 			}
 
 			// 16 is an arbitrary number for maxTlen
-			ff1, err := NewCipher(testVector.radix, 16, key, tweak)
+			ff1, err := NewCipher(testVector.radix, key)
 			if err != nil {
 				t.Fatalf("Unable to create cipher: %v", err)
 			}
 
-			ciphertext, err := ff1.Encrypt(testVector.plaintext)
+			ciphertext, err := ff1.Encrypt(testVector.plaintext, tweak)
 			if err != nil {
 				t.Fatalf("%v", err)
 			}
@@ -158,12 +158,12 @@ func TestDecrypt(t *testing.T) {
 			}
 
 			// 16 is an arbitrary number for maxTlen
-			ff1, err := NewCipher(testVector.radix, 16, key, tweak)
+			ff1, err := NewCipher(testVector.radix, key)
 			if err != nil {
 				t.Fatalf("Unable to create cipher: %v", err)
 			}
 
-			plaintext, err := ff1.Decrypt(testVector.ciphertext)
+			plaintext, err := ff1.Decrypt(testVector.ciphertext, tweak)
 			if err != nil {
 				t.Fatalf("%v", err)
 			}
@@ -182,19 +182,19 @@ func TestLong(t *testing.T) {
 	tweak, err := hex.DecodeString("")
 
 	// 16 is an arbitrary number for maxTlen
-	ff1, err := NewCipher(36, 16, key, tweak)
+	ff1, err := NewCipher(36, key)
 	if err != nil {
 		t.Fatalf("Unable to create cipher: %v", err)
 	}
 
 	plaintext := "xs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyal"
 
-	ciphertext, err := ff1.Encrypt(plaintext)
+	ciphertext, err := ff1.Encrypt(plaintext, tweak)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 
-	decrypted, err := ff1.Decrypt(ciphertext)
+	decrypted, err := ff1.Decrypt(ciphertext, tweak)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
@@ -219,7 +219,7 @@ func ExampleCipher_Encrypt() {
 
 	// Create a new FF1 cipher "object"
 	// 10 is the radix/base, and 8 is the tweak length.
-	FF1, err := NewCipher(10, 8, key, tweak)
+	FF1, err := NewCipher(10, key)
 	if err != nil {
 		panic(err)
 	}
@@ -227,7 +227,7 @@ func ExampleCipher_Encrypt() {
 	original := "0123456789"
 
 	// Call the encryption function on an example test vector
-	ciphertext, err := FF1.Encrypt(original)
+	ciphertext, err := FF1.Encrypt(original, tweak)
 	if err != nil {
 		panic(err)
 	}
@@ -251,14 +251,14 @@ func ExampleCipher_Decrypt() {
 
 	// Create a new FF1 cipher "object"
 	// 10 is the radix/base, and 8 is the tweak length.
-	FF1, err := NewCipher(10, 8, key, tweak)
+	FF1, err := NewCipher(10, key)
 	if err != nil {
 		panic(err)
 	}
 
 	ciphertext := "2433477484"
 
-	plaintext, err := FF1.Decrypt(ciphertext)
+	plaintext, err := FF1.Decrypt(ciphertext, tweak)
 	if err != nil {
 		panic(err)
 	}
@@ -276,16 +276,11 @@ func BenchmarkNewCipher(b *testing.B) {
 				b.Fatalf("Unable to decode hex key: %v", testVector.key)
 			}
 
-			tweak, err := hex.DecodeString(testVector.tweak)
-			if err != nil {
-				b.Fatalf("Unable to decode tweak: %v", testVector.tweak)
-			}
-
 			b.ResetTimer()
 
 			// 16 is an arbitrary number for maxTlen
 			for n := 0; n < b.N; n++ {
-				NewCipher(testVector.radix, 16, key, tweak)
+				NewCipher(testVector.radix, key)
 			}
 		})
 	}
@@ -306,7 +301,7 @@ func BenchmarkEncrypt(b *testing.B) {
 			}
 
 			// 16 is an arbitrary number for maxTlen
-			ff1, err := NewCipher(testVector.radix, 16, key, tweak)
+			ff1, err := NewCipher(testVector.radix, key)
 			if err != nil {
 				b.Fatalf("Unable to create cipher: %v", err)
 			}
@@ -314,7 +309,7 @@ func BenchmarkEncrypt(b *testing.B) {
 			b.ResetTimer()
 
 			for n := 0; n < b.N; n++ {
-				ff1.Encrypt(testVector.plaintext)
+				ff1.Encrypt(testVector.plaintext, tweak)
 			}
 		})
 	}
@@ -335,7 +330,7 @@ func BenchmarkDecrypt(b *testing.B) {
 			}
 
 			// 16 is an arbitrary number for maxTlen
-			ff1, err := NewCipher(testVector.radix, 16, key, tweak)
+			ff1, err := NewCipher(testVector.radix, key)
 			if err != nil {
 				b.Fatalf("Unable to create cipher: %v", err)
 			}
@@ -343,7 +338,7 @@ func BenchmarkDecrypt(b *testing.B) {
 			b.ResetTimer()
 
 			for n := 0; n < b.N; n++ {
-				ff1.Decrypt(testVector.ciphertext)
+				ff1.Decrypt(testVector.ciphertext, tweak)
 			}
 		})
 	}
@@ -367,17 +362,17 @@ func BenchmarkE2ESample7(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		// 16 is an arbitrary number for maxTlen
-		ff1, err := NewCipher(testVector.radix, 16, key, tweak)
+		ff1, err := NewCipher(testVector.radix, key)
 		if err != nil {
 			b.Fatalf("Unable to create cipher: %v", err)
 		}
 
-		ciphertext, err := ff1.Encrypt(testVector.plaintext)
+		ciphertext, err := ff1.Encrypt(testVector.plaintext, tweak)
 		if err != nil {
 			b.Fatalf("%v", err)
 		}
 
-		plaintext, err := ff1.Decrypt(ciphertext)
+		plaintext, err := ff1.Decrypt(ciphertext, tweak)
 		if err != nil {
 			b.Fatalf("%v", err)
 		}
@@ -393,7 +388,7 @@ func BenchmarkEncryptLong(b *testing.B) {
 	tweak, err := hex.DecodeString("")
 
 	// 16 is an arbitrary number for maxTlen
-	ff1, err := NewCipher(36, 16, key, tweak)
+	ff1, err := NewCipher(36, key)
 	if err != nil {
 		b.Fatalf("Unable to create cipher: %v", err)
 	}
@@ -401,6 +396,6 @@ func BenchmarkEncryptLong(b *testing.B) {
 	b.ResetTimer()
 
 	for n := 0; n < b.N; n++ {
-		ff1.Encrypt("xs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwd")
+		ff1.Encrypt("xs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwdxs8a0azh2avyalyzuwd", tweak)
 	}
 }
